@@ -17,7 +17,7 @@
   "resonantia.attune.already": "You are already attuned to %s.",
   "resonantia.attune.requires": "%s needs first: %s",
   "resonantia.attune.lacking": "%s still needs insight: %s",
-  "resonantia.usage": "/resonantia [attune <name>]",
+  "resonantia.usage": "/resonantia [riddle <name> | tune <name> <8 slots>]",
   "resonantia.tone.calor": "Calor",
   "resonantia.tone.lux": "Lux",
   "resonantia.tone.fluxus": "Fluxus",
@@ -38,5 +38,14 @@
   "resonantia.attunement.resonant_lens": "Resonant Lens",
   "resonantia.attunement.tone_jar": "Tone Jar",
   "resonantia.attunement.dissonance_ward": "Dissonance Ward",
-  "resonantia.attunement.harmonic_altar": "Harmonic Altar"
+  "resonantia.attunement.harmonic_altar": "Harmonic Altar",
+  "resonantia.riddle.chords": "%s needs the chords: %s",
+  "resonantia.riddle.dissonance": "Dissonance from %s to %s",
+  "resonantia.riddle.token_cost": "Each token you place costs %s insight of its tone",
+  "resonantia.riddle.board": "Board: %s",
+  "resonantia.riddle.anchor": "Slot %s must keep %s",
+  "resonantia.riddle.missing": "Still silent: %s",
+  "resonantia.riddle.too_harmonious": "Too harmonious: dissonance %s",
+  "resonantia.riddle.too_dissonant": "Too dissonant: dissonance %s",
+  "resonantia.riddle.slots": "Give eight slots: tone names or - for empty"
 }

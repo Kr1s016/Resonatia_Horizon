@@ -17,7 +17,7 @@
   "resonantia.attune.already": "Ты уже настроен на %s.",
   "resonantia.attune.requires": "%s сначала требует: %s",
   "resonantia.attune.lacking": "%s ещё не хватает прозрения: %s",
-  "resonantia.usage": "/resonantia [attune <название>]",
+  "resonantia.usage": "/resonantia [riddle <название> | tune <название> <8 гнёзд>]",
   "resonantia.tone.calor": "Калор",
   "resonantia.tone.lux": "Люкс",
   "resonantia.tone.fluxus": "Флюксус",
@@ -38,5 +38,14 @@
   "resonantia.attunement.resonant_lens": "Резонансная линза",
   "resonantia.attunement.tone_jar": "Сосуд тона",
   "resonantia.attunement.dissonance_ward": "Оберег диссонанса",
-  "resonantia.attunement.harmonic_altar": "Гармонический алтарь"
+  "resonantia.attunement.harmonic_altar": "Гармонический алтарь",
+  "resonantia.riddle.chords": "%s требует аккорды: %s",
+  "resonantia.riddle.dissonance": "Диссонанс от %s до %s",
+  "resonantia.riddle.token_cost": "Каждый твой жетон стоит %s прозрения своего тона",
+  "resonantia.riddle.board": "Поле: %s",
+  "resonantia.riddle.anchor": "В гнезде %s должен остаться %s",
+  "resonantia.riddle.missing": "Ещё не звучат: %s",
+  "resonantia.riddle.too_harmonious": "Слишком гармонично: диссонанс %s",
+  "resonantia.riddle.too_dissonant": "Слишком диссонансно: диссонанс %s",
+  "resonantia.riddle.slots": "Укажи восемь гнёзд: названия тонов или - для пустого"
 }

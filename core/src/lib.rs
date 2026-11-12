@@ -416,47 +416,209 @@ pub fn profile_of(id: &str) -> Profile {
     Profile::from_raw(raw)
 }
 
-/// What an attunement unlocks and costs.
+/// The attunement board: eight slots in a ring, each empty or holding a tone token.
+/// Slot `i` neighbours `i - 1` and `i + 1` (mod 8).
+pub type Board = [Option<Tone>; TONE_COUNT];
+
+/// What two tokens in neighbouring slots do, by their distance on the tone wheel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pairing {
+    /// The same tone: no effect.
+    Unison,
+    /// Neighbours on the wheel: their chord sounds.
+    Chord(Chord),
+    /// Two steps apart: no effect.
+    Neutral,
+    /// Three steps apart: grating, 1 dissonance.
+    Harsh,
+    /// Opposites: 2 dissonance.
+    Clash,
+}
+
+pub fn pairing(a: Tone, b: Tone) -> Pairing {
+    match a.distance(b) {
+        0 => Pairing::Unison,
+        1 => Pairing::Chord(Chord::of(a, b).expect("distance 1 is a chord")),
+        2 => Pairing::Neutral,
+        3 => Pairing::Harsh,
+        _ => Pairing::Clash,
+    }
+}
+
+/// How a board sounds.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reading {
+    /// Chords sounding, in wheel order, without repeats.
+    pub chords: Vec<Chord>,
+    pub dissonance: u32,
+}
+
+pub fn read_board(board: &Board) -> Reading {
+    let mut chords = BTreeSet::new();
+    let mut dissonance = 0;
+    for i in 0..TONE_COUNT {
+        let (Some(a), Some(b)) = (board[i], board[(i + 1) % TONE_COUNT]) else {
+            continue;
+        };
+        match pairing(a, b) {
+            Pairing::Chord(c) => {
+                chords.insert(c);
+            }
+            Pairing::Harsh => dissonance += 1,
+            Pairing::Clash => dissonance += 2,
+            Pairing::Unison | Pairing::Neutral => {}
+        }
+    }
+    Reading {
+        chords: chords.into_iter().collect(),
+        dissonance,
+    }
+}
+
+/// The puzzle an attunement sets: chords that must sound on the board, the dissonance
+/// allowed, and tokens already in place (free, and fixed).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Riddle {
+    pub chords: &'static [Chord],
+    pub min_dissonance: u32,
+    pub max_dissonance: u32,
+    pub anchors: &'static [(usize, Tone)],
+    /// Insight each token the player places costs, in its own tone.
+    pub token_cost: u32,
+}
+
+impl Riddle {
+    /// The board with only the anchors placed: where the player starts.
+    pub fn start(&self) -> Board {
+        let mut b = [None; TONE_COUNT];
+        for &(slot, tone) in self.anchors {
+            b[slot] = Some(tone);
+        }
+        b
+    }
+
+    /// Insight the player's tokens on `board` cost (anchors are free).
+    pub fn cost(&self, board: &Board) -> [u32; TONE_COUNT] {
+        let mut cost = [0; TONE_COUNT];
+        for (slot, tone) in board.iter().enumerate() {
+            if let Some(t) = tone
+                && !self.anchors.iter().any(|&(s, _)| s == slot)
+            {
+                cost[t.index()] += self.token_cost;
+            }
+        }
+        cost
+    }
+
+    /// Whether `board` solves the riddle, and if not, why.
+    pub fn check(&self, board: &Board) -> Result<Reading, RiddleError> {
+        if let Some(&(slot, tone)) = self.anchors.iter().find(|&&(s, t)| board[s] != Some(t)) {
+            return Err(RiddleError::AnchorMoved { slot, tone });
+        }
+        let reading = read_board(board);
+        let missing: Vec<Chord> = self
+            .chords
+            .iter()
+            .copied()
+            .filter(|c| !reading.chords.contains(c))
+            .collect();
+        if !missing.is_empty() {
+            return Err(RiddleError::MissingChords(missing));
+        }
+        if reading.dissonance < self.min_dissonance {
+            return Err(RiddleError::TooHarmonious(reading.dissonance));
+        }
+        if reading.dissonance > self.max_dissonance {
+            return Err(RiddleError::TooDissonant(reading.dissonance));
+        }
+        Ok(reading)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RiddleError {
+    /// An anchor's slot doesn't hold its tone.
+    AnchorMoved {
+        slot: usize,
+        tone: Tone,
+    },
+    MissingChords(Vec<Chord>),
+    /// Dissonance below the riddle's minimum.
+    TooHarmonious(u32),
+    /// Dissonance above the riddle's maximum.
+    TooDissonant(u32),
+}
+
+/// An attunement: what it needs first, and the riddle that unlocks it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Attunement {
     pub id: &'static str,
-    /// Insight spent, per tone.
-    pub cost: [u32; TONE_COUNT],
     /// Attunements that must come first.
     pub requires: &'static [&'static str],
+    pub riddle: Riddle,
 }
 
 /// The first branch of the attunement tree. Later branches (devices, rituals) build on it.
 pub const ATTUNEMENTS: &[Attunement] = &[
     Attunement {
         id: "first_chord",
-        // Hearing a chord at all: a little of every tone.
-        cost: [2, 2, 2, 2, 2, 2, 2, 2],
+        // Hearing chords at all: sap and ray, two at once.
         requires: &[],
+        riddle: Riddle {
+            chords: &[Chord::Radius, Chord::Sucus],
+            min_dissonance: 0,
+            max_dissonance: 0,
+            anchors: &[],
+            token_cost: 2,
+        },
     },
     Attunement {
         id: "resonant_lens",
-        // A lens that shows profiles in tooltips: light and flow.
-        cost: [0, 12, 8, 0, 0, 0, 4, 0],
+        // A lens that shows profiles in tooltips: light at its centre, burning and flowing.
         requires: &["first_chord"],
+        riddle: Riddle {
+            chords: &[Chord::Ardor, Chord::Radius],
+            min_dissonance: 0,
+            max_dissonance: 0,
+            anchors: &[(0, Tone::Lux)],
+            token_cost: 3,
+        },
     },
     Attunement {
         id: "tone_jar",
-        // Bottling a tone: cold to hold it, weight to seal it.
-        cost: [0, 0, 4, 0, 10, 0, 10, 0],
+        // Bottling a tone: life held in cold, sealed by the dense core. Shadow sits apart.
         requires: &["first_chord"],
+        riddle: Riddle {
+            chords: &[Chord::Somnus, Chord::Nucleus],
+            min_dissonance: 0,
+            max_dissonance: 1,
+            anchors: &[(4, Tone::Umbra)],
+            token_cost: 3,
+        },
     },
     Attunement {
         id: "dissonance_ward",
-        // Turning dissonance against itself: shadow and decay, balanced by light.
-        cost: [0, 6, 0, 0, 0, 12, 0, 12],
+        // Turning dissonance against itself: ash and ray, with a clash between them.
         requires: &["first_chord", "tone_jar"],
+        riddle: Riddle {
+            chords: &[Chord::Cinis, Chord::Radius],
+            min_dissonance: 2,
+            max_dissonance: 3,
+            anchors: &[(2, Tone::Fluxus), (3, Tone::Pondus)],
+            token_cost: 3,
+        },
     },
     Attunement {
         id: "harmonic_altar",
-        // The ritual altar: every chord, so every tone, heavily.
-        cost: [16, 16, 16, 16, 16, 16, 16, 16],
+        // The ritual altar: every chord at once, the whole wheel in harmony.
         requires: &["resonant_lens", "tone_jar"],
+        riddle: Riddle {
+            chords: &Chord::ALL,
+            min_dissonance: 0,
+            max_dissonance: 0,
+            anchors: &[(0, Tone::Calor), (4, Tone::Gelu)],
+            token_cost: 4,
+        },
     },
 ];
 
@@ -484,7 +646,9 @@ pub enum AttuneError {
     AlreadyAttuned,
     /// The attunements still missing.
     Requires(Vec<&'static str>),
-    /// The insight still missing, per tone.
+    /// The board doesn't solve the riddle.
+    Riddle(RiddleError),
+    /// The insight still missing, per tone, for the tokens on the board.
     Lacking([u32; TONE_COUNT]),
 }
 
@@ -512,7 +676,8 @@ impl Knowledge {
         ScanResult::Learned { profile, gained }
     }
 
-    pub fn can_attune(&self, id: &str) -> Result<&'static Attunement, AttuneError> {
+    /// Checks prerequisites only: whether the player may try the riddle.
+    pub fn may_attempt(&self, id: &str) -> Result<&'static Attunement, AttuneError> {
         let a = attunement(id).ok_or(AttuneError::Unknown)?;
         if self.attuned.contains(a.id) {
             return Err(AttuneError::AlreadyAttuned);
@@ -526,19 +691,28 @@ impl Knowledge {
         if !missing.is_empty() {
             return Err(AttuneError::Requires(missing));
         }
+        Ok(a)
+    }
+
+    /// Whether `board` would attune `id` now: prerequisites, the riddle, the insight.
+    pub fn can_attune(&self, id: &str, board: &Board) -> Result<&'static Attunement, AttuneError> {
+        let a = self.may_attempt(id)?;
+        a.riddle.check(board).map_err(AttuneError::Riddle)?;
+        let cost = a.riddle.cost(board);
         let lacking: [u32; TONE_COUNT] =
-            std::array::from_fn(|i| a.cost[i].saturating_sub(self.insight[i]));
+            std::array::from_fn(|i| cost[i].saturating_sub(self.insight[i]));
         if lacking.iter().any(|&n| n > 0) {
             return Err(AttuneError::Lacking(lacking));
         }
         Ok(a)
     }
 
-    /// Spends the insight and records the attunement.
-    pub fn attune(&mut self, id: &str) -> Result<&'static Attunement, AttuneError> {
-        let a = self.can_attune(id)?;
-        for i in 0..TONE_COUNT {
-            self.insight[i] -= a.cost[i];
+    /// Solves the riddle with `board`: spends its tokens' insight and records the attunement.
+    pub fn attune(&mut self, id: &str, board: &Board) -> Result<&'static Attunement, AttuneError> {
+        let a = self.can_attune(id, board)?;
+        let cost = a.riddle.cost(board);
+        for (have, spent) in self.insight.iter_mut().zip(cost) {
+            *have -= spent;
         }
         self.attuned.insert(a.id.to_owned());
         Ok(a)
@@ -665,22 +839,156 @@ mod tests {
         assert_eq!(i[Tone::Gelu.index()], 0);
     }
 
+    use Tone::*;
+
+    fn board(slots: [Option<Tone>; TONE_COUNT]) -> Board {
+        slots
+    }
+
+    /// A known solution to every riddle, so none is unsolvable.
+    fn solution(id: &str) -> Board {
+        match id {
+            "first_chord" => board([
+                Some(Lux),
+                Some(Fluxus),
+                Some(Vigor),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ]),
+            "resonant_lens" => board([
+                Some(Lux),
+                Some(Fluxus),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Calor),
+            ]),
+            "tone_jar" => board([
+                None,
+                None,
+                Some(Vigor),
+                Some(Gelu),
+                Some(Umbra),
+                Some(Pondus),
+                None,
+                None,
+            ]),
+            "dissonance_ward" => board([
+                None,
+                Some(Lux),
+                Some(Fluxus),
+                Some(Pondus),
+                Some(Tabes),
+                None,
+                None,
+                None,
+            ]),
+            "harmonic_altar" => Tone::ALL.map(Some),
+            _ => panic!("no solution for {id}"),
+        }
+    }
+
     #[test]
-    fn attunements_need_prerequisites_and_insight() {
-        let mut k = Knowledge::default();
-        assert_eq!(k.attune("nope"), Err(AttuneError::Unknown));
+    fn neighbouring_slots_pair_by_wheel_distance() {
+        assert_eq!(pairing(Calor, Calor), Pairing::Unison);
+        assert_eq!(pairing(Calor, Lux), Pairing::Chord(Chord::Ardor));
+        assert_eq!(pairing(Calor, Fluxus), Pairing::Neutral);
+        assert_eq!(pairing(Calor, Vigor), Pairing::Harsh);
+        assert_eq!(pairing(Calor, Gelu), Pairing::Clash);
+        // The ring wraps: slot 7 neighbours slot 0.
+        let mut b = [None; TONE_COUNT];
+        b[7] = Some(Tabes);
+        b[0] = Some(Calor);
+        assert_eq!(read_board(&b).chords, vec![Chord::Furor]);
+        b[1] = Some(Gelu);
+        assert_eq!(read_board(&b).dissonance, 2);
+    }
+
+    #[test]
+    fn every_riddle_has_a_solution() {
+        for a in ATTUNEMENTS {
+            let b = solution(a.id);
+            assert_eq!(a.riddle.check(&b).map(|_| ()), Ok(()), "{}", a.id);
+        }
+    }
+
+    #[test]
+    fn anchors_are_fixed_and_free() {
+        let r = attunement("resonant_lens").unwrap().riddle;
+        let start = r.start();
+        assert_eq!(start[0], Some(Lux));
+        assert_eq!(r.cost(&start), [0; TONE_COUNT]);
+        let mut moved = solution("resonant_lens");
+        moved[0] = Some(Gelu);
         assert_eq!(
-            k.attune("tone_jar"),
+            r.check(&moved),
+            Err(RiddleError::AnchorMoved { slot: 0, tone: Lux })
+        );
+        let cost = r.cost(&solution("resonant_lens"));
+        assert_eq!(cost[Calor.index()], 3);
+        assert_eq!(cost[Fluxus.index()], 3);
+        assert_eq!(cost[Lux.index()], 0);
+    }
+
+    #[test]
+    fn riddles_bound_dissonance_both_ways() {
+        let ward = attunement("dissonance_ward").unwrap().riddle;
+        let mut calm = solution("dissonance_ward");
+        calm[2] = None; // removes the anchor too
+        assert!(matches!(
+            ward.check(&calm),
+            Err(RiddleError::AnchorMoved { .. })
+        ));
+        let jar = attunement("tone_jar").unwrap().riddle;
+        let mut loud = solution("tone_jar");
+        loud[6] = Some(Fluxus); // Pondus next to Fluxus: a clash
+        assert_eq!(jar.check(&loud), Err(RiddleError::TooDissonant(2)));
+        let first = attunement("first_chord").unwrap().riddle;
+        assert_eq!(
+            first.check(&board([
+                Some(Lux),
+                Some(Fluxus),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            ])),
+            Err(RiddleError::MissingChords(vec![Chord::Sucus]))
+        );
+    }
+
+    #[test]
+    fn attunements_need_prerequisites_a_solution_and_insight() {
+        let mut k = Knowledge::default();
+        let empty = [None; TONE_COUNT];
+        assert_eq!(k.attune("nope", &empty), Err(AttuneError::Unknown));
+        assert_eq!(
+            k.attune("tone_jar", &empty),
             Err(AttuneError::Requires(vec!["first_chord"]))
         );
-        let Err(AttuneError::Lacking(l)) = k.attune("first_chord") else {
+        assert!(matches!(
+            k.attune("first_chord", &empty),
+            Err(AttuneError::Riddle(RiddleError::MissingChords(_)))
+        ));
+        let b = solution("first_chord");
+        let Err(AttuneError::Lacking(l)) = k.attune("first_chord", &b) else {
             panic!("costs insight");
         };
-        assert_eq!(l, [2; TONE_COUNT]);
+        assert_eq!(l, [0, 2, 2, 2, 0, 0, 0, 0]);
         k.insight = [5; TONE_COUNT];
-        assert!(k.attune("first_chord").is_ok());
-        assert_eq!(k.insight, [3; TONE_COUNT]);
-        assert_eq!(k.attune("first_chord"), Err(AttuneError::AlreadyAttuned));
+        assert!(k.attune("first_chord", &b).is_ok());
+        assert_eq!(k.insight, [5, 3, 3, 3, 5, 5, 5, 5]);
+        assert_eq!(
+            k.attune("first_chord", &b),
+            Err(AttuneError::AlreadyAttuned)
+        );
         let ids: Vec<_> = k.available().iter().map(|a| a.id).collect();
         assert_eq!(ids, ["resonant_lens", "tone_jar"]);
     }

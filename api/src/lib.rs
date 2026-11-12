@@ -4,14 +4,17 @@
 //!
 //! - Right-click a block with the tuning fork: hear its tones, learn insight the first time.
 //! - Right-click in the air with the tuning fork: your insight on the action bar.
-//! - `/resonantia`: your knowledge. `/resonantia attune <name>`: spend insight.
+//! - `/resonantia`: your knowledge.
+//! - `/resonantia riddle <name>`: an attunement's riddle and its starting board.
+//! - `/resonantia tune <name> <slot0> … <slot7>`: solve it with tone tokens (`-` for an
+//!   empty slot), spending the tokens' insight. The codex screen will build the same board.
 use horizon_client::mod_api::{
     AttachmentCodec, AttachmentError, AttachmentType, Compound, Flow, Holder, Hooks, Host,
     NativeCommand, PerformCommandEvent, RegisterCommandsEvent, Tag, Text, UseItemEvent,
     UseItemOnEvent,
 };
 use resonantia_core::{
-    AttuneError, Knowledge, Profile, ScanResult, TONE_COUNT, Tone,
+    AttuneError, Board, Knowledge, Profile, Riddle, RiddleError, ScanResult, TONE_COUNT, Tone,
 };
 
 pub const TUNING_FORK: &str = "resonantia:tuning_fork";
@@ -40,7 +43,11 @@ fn strings(set: &std::collections::BTreeSet<String>) -> Tag {
 }
 
 fn encode_knowledge(k: &Knowledge) -> Result<Compound, AttachmentError> {
-    let insight = k.insight.iter().map(|&n| n.min(i32::MAX as u32) as i32).collect();
+    let insight = k
+        .insight
+        .iter()
+        .map(|&n| n.min(i32::MAX as u32) as i32)
+        .collect();
     Ok([
         ("insight".into(), Tag::IntArray(insight)),
         ("scanned".into(), strings(&k.scanned)),
@@ -49,7 +56,10 @@ fn encode_knowledge(k: &Knowledge) -> Result<Compound, AttachmentError> {
     .into())
 }
 
-fn read_strings(data: &Compound, key: &str) -> Result<std::collections::BTreeSet<String>, AttachmentError> {
+fn read_strings(
+    data: &Compound,
+    key: &str,
+) -> Result<std::collections::BTreeSet<String>, AttachmentError> {
     match data.get(&key.into()) {
         None => Ok(Default::default()),
         Some(Tag::List(items)) => items
@@ -82,7 +92,10 @@ fn decode_knowledge(data: &Compound) -> Result<Knowledge, AttachmentError> {
 fn tone_text(tone: Tone, amount: u32) -> Text {
     // "Calor 6", coloured as the tone; the name is translated on the player's client.
     Text::empty()
-        .append(Text::translate(&format!("resonantia.tone.{}", tone.id()), &[]))
+        .append(Text::translate(
+            &format!("resonantia.tone.{}", tone.id()),
+            &[],
+        ))
         .append(Text::literal(format!(" {amount}")))
         .with_color(tone.color())
 }
@@ -136,7 +149,10 @@ pub fn scan_lines(result: &ScanResult, id: &str) -> Vec<Text> {
     match result {
         ScanResult::Silent => vec![Text::translate("resonantia.scan.silent", &[what])],
         ScanResult::Known(p) => {
-            let mut v = vec![Text::translate("resonantia.scan.known", &[what, profile_text(p)])];
+            let mut v = vec![Text::translate(
+                "resonantia.scan.known",
+                &[what, profile_text(p)],
+            )];
             v.extend(chords_line(p));
             v
         }
@@ -146,7 +162,10 @@ pub fn scan_lines(result: &ScanResult, id: &str) -> Vec<Text> {
                 &[what, profile_text(profile)],
             )];
             v.extend(chords_line(profile));
-            v.push(Text::translate("resonantia.scan.gained", &[amounts_text(gained)]));
+            v.push(Text::translate(
+                "resonantia.scan.gained",
+                &[amounts_text(gained)],
+            ));
             v
         }
     }
@@ -161,7 +180,10 @@ fn chords_line(p: &Profile) -> Option<Text> {
         .into_iter()
         .map(|(c, s)| {
             Text::empty()
-                .append(Text::translate(&format!("resonantia.chord.{}", c.id()), &[]))
+                .append(Text::translate(
+                    &format!("resonantia.chord.{}", c.id()),
+                    &[],
+                ))
                 .append(Text::literal(format!(" {s}")))
         })
         .collect();
@@ -187,26 +209,128 @@ fn knowledge_lines(k: &Knowledge) -> Vec<Text> {
     ]
 }
 
-fn attune_line(k: &mut Knowledge, id: &str) -> Text {
-    match k.attune(id) {
-        Ok(a) => Text::translate("resonantia.attune.done", &[attunement_name(a.id)]),
-        Err(AttuneError::Unknown) => {
+fn tone_name(tone: Tone) -> Text {
+    Text::translate(&format!("resonantia.tone.{}", tone.id()), &[]).with_color(tone.color())
+}
+
+fn chord_name(c: resonantia_core::Chord) -> Text {
+    Text::translate(&format!("resonantia.chord.{}", c.id()), &[])
+}
+
+/// The board as eight short cells: `[Lux] [ - ] …`.
+fn board_text(board: &Board) -> Text {
+    let mut out = Text::empty();
+    for (i, slot) in board.iter().enumerate() {
+        if i > 0 {
+            out = out.append(Text::literal(" "));
+        }
+        out = out.append(Text::literal(format!("{i}:")));
+        out = match slot {
+            Some(t) => out.append(tone_name(*t)),
+            None => out.append(Text::literal("-")),
+        };
+    }
+    out
+}
+
+fn riddle_lines(id: &str, r: &Riddle) -> Vec<Text> {
+    vec![
+        Text::translate(
+            "resonantia.riddle.chords",
+            &[
+                attunement_name(id),
+                join(r.chords.iter().map(|&c| chord_name(c)).collect()),
+            ],
+        ),
+        Text::translate(
+            "resonantia.riddle.dissonance",
+            &[
+                Text::literal(r.min_dissonance.to_string()),
+                Text::literal(r.max_dissonance.to_string()),
+            ],
+        ),
+        Text::translate(
+            "resonantia.riddle.token_cost",
+            &[Text::literal(r.token_cost.to_string())],
+        ),
+        Text::translate("resonantia.riddle.board", &[board_text(&r.start())]),
+    ]
+}
+
+/// Parses eight slots: tone ids (`lux`) or `-`/`_` for empty.
+pub fn parse_board<'a>(words: impl Iterator<Item = &'a str>) -> Option<Board> {
+    let slots: Vec<&str> = words.collect();
+    if slots.len() != TONE_COUNT {
+        return None;
+    }
+    let mut board = [None; TONE_COUNT];
+    for (cell, word) in board.iter_mut().zip(slots) {
+        *cell = match word {
+            "-" | "_" => None,
+            w => Some(Tone::from_id(&w.to_ascii_lowercase())?),
+        };
+    }
+    Some(board)
+}
+
+fn riddle_error_line(e: &RiddleError) -> Text {
+    match e {
+        RiddleError::AnchorMoved { slot, tone } => Text::translate(
+            "resonantia.riddle.anchor",
+            &[Text::literal(slot.to_string()), tone_name(*tone)],
+        ),
+        RiddleError::MissingChords(missing) => Text::translate(
+            "resonantia.riddle.missing",
+            &[join(missing.iter().map(|&c| chord_name(c)).collect())],
+        ),
+        RiddleError::TooHarmonious(d) => Text::translate(
+            "resonantia.riddle.too_harmonious",
+            &[Text::literal(d.to_string())],
+        ),
+        RiddleError::TooDissonant(d) => Text::translate(
+            "resonantia.riddle.too_dissonant",
+            &[Text::literal(d.to_string())],
+        ),
+    }
+}
+
+fn attune_error_line(id: &str, e: AttuneError) -> Text {
+    match e {
+        AttuneError::Unknown => {
             Text::translate("resonantia.attune.unknown", &[Text::literal(id.to_owned())])
         }
-        Err(AttuneError::AlreadyAttuned) => {
+        AttuneError::AlreadyAttuned => {
             Text::translate("resonantia.attune.already", &[attunement_name(id)])
         }
-        Err(AttuneError::Requires(missing)) => Text::translate(
+        AttuneError::Requires(missing) => Text::translate(
             "resonantia.attune.requires",
             &[
                 attunement_name(id),
                 join(missing.into_iter().map(attunement_name).collect()),
             ],
         ),
-        Err(AttuneError::Lacking(lacking)) => Text::translate(
+        AttuneError::Riddle(e) => riddle_error_line(&e),
+        AttuneError::Lacking(lacking) => Text::translate(
             "resonantia.attune.lacking",
             &[attunement_name(id), amounts_text(&lacking)],
         ),
+    }
+}
+
+fn riddle_command(k: &Knowledge, id: &str) -> Vec<Text> {
+    match k.may_attempt(id) {
+        Ok(a) => riddle_lines(a.id, &a.riddle),
+        Err(e) => vec![attune_error_line(id, e)],
+    }
+}
+
+fn tune_command(k: &mut Knowledge, id: &str, board: &Board) -> Vec<Text> {
+    match k.attune(id, board) {
+        Ok(a) => vec![Text::translate(
+            "resonantia.attune.done",
+            &[attunement_name(a.id)],
+        )],
+        Err(e) => vec![attune_error_line(id, e)],
     }
 }
 
@@ -243,7 +367,10 @@ impl Hooks for Resonantia {
                     host.tell(player.uuid, line);
                 }
             }
-            Err(e) => eprintln!("[resonantia] could not read {}'s knowledge: {e:?}", player.name),
+            Err(e) => eprintln!(
+                "[resonantia] could not read {}'s knowledge: {e:?}",
+                player.name
+            ),
         }
         Flow::Cancel
     }
@@ -269,7 +396,10 @@ impl Hooks for Resonantia {
         event.commands.push(NativeCommand::new("resonantia"));
         event
             .commands
-            .push(NativeCommand::new("resonantia attune <name:word>"));
+            .push(NativeCommand::new("resonantia riddle <name:word>"));
+        event.commands.push(NativeCommand::new(
+            "resonantia tune <name:word> <slots:greedy>",
+        ));
     }
 
     fn perform_command(&self, host: &mut dyn Host, event: &mut PerformCommandEvent) -> Flow {
@@ -280,9 +410,11 @@ impl Hooks for Resonantia {
         let uuid = event.player.uuid;
         let lines = match (words.next(), words.next()) {
             (None, _) => with_knowledge(host, uuid, |k| knowledge_lines(k)),
-            (Some("attune"), Some(name)) => {
-                with_knowledge(host, uuid, |k| vec![attune_line(k, name)])
-            }
+            (Some("riddle"), Some(name)) => with_knowledge(host, uuid, |k| riddle_command(k, name)),
+            (Some("tune"), Some(name)) => match parse_board(words) {
+                Some(board) => with_knowledge(host, uuid, |k| tune_command(k, name, &board)),
+                None => Ok(vec![Text::translate("resonantia.riddle.slots", &[])]),
+            },
             _ => Ok(vec![Text::translate("resonantia.usage", &[])]),
         };
         match lines {
@@ -300,6 +432,7 @@ impl Hooks for Resonantia {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use resonantia_core::attunement;
 
     #[test]
     fn knowledge_survives_its_codec() {
@@ -313,7 +446,32 @@ mod tests {
     }
 
     #[test]
+    fn boards_parse_from_eight_words() {
+        let b = parse_board("lux FLUXUS vigor - - _ - -".split_whitespace()).unwrap();
+        assert_eq!(b[0], Some(Tone::Lux));
+        assert_eq!(b[1], Some(Tone::Fluxus));
+        assert_eq!(b[3], None);
+        assert_eq!(parse_board("lux fluxus".split_whitespace()), None);
+        assert_eq!(parse_board("aqua - - - - - - -".split_whitespace()), None);
+    }
+
+    #[test]
+    fn tuning_solves_the_first_riddle() {
+        let mut k = Knowledge {
+            insight: [4; TONE_COUNT],
+            ..Default::default()
+        };
+        let b = parse_board("lux fluxus vigor - - - - -".split_whitespace()).unwrap();
+        tune_command(&mut k, "first_chord", &b);
+        assert!(k.attuned.contains("first_chord"));
+        assert!(attunement("first_chord").is_some());
+    }
+
+    #[test]
     fn an_empty_compound_is_fresh_knowledge() {
-        assert_eq!(decode_knowledge(&Compound::new()).unwrap(), Knowledge::default());
+        assert_eq!(
+            decode_knowledge(&Compound::new()).unwrap(),
+            Knowledge::default()
+        );
     }
 }

@@ -27,7 +27,8 @@ horizon-launcher native-build /path/to/resonantia --instance <instance> --trust-
 ```
 
 Мод запинен на коммит Horizon `1511bd7a23992d219e8d449f26d140bfcdd1434e`. В игре:
-ПКМ камертоном по блоку, `/resonantia`, `/resonantia attune first_chord`.
+ПКМ камертоном по блоку, `/resonantia`, `/resonantia riddle first_chord`,
+`/resonantia tune first_chord lux fluxus vigor - - - - -`.
 
 Пока камертон и кодекс используют ванильные модели аметистового осколка и книги:
 своих текстур ещё нет.
