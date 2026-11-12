@@ -1,0 +1,8 @@
+[package]
+name = "resonantia-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Resonantia's game rules: tones, resonance profiles, insight and attunements. No game types."
+
+[dependencies]

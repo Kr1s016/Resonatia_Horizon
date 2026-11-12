@@ -1,0 +1,16 @@
+# Resonantia: a native trait mod (docs/native-mods.md, "Trait mods"). Build it with
+# `horizon-launcher native-build <this folder> --instance <instance> --trust-native-code`.
+[mod]
+id = "resonantia"
+version = "0.1.0"
+
+[compatibility]
+horizon_revision = "1511bd7a23992d219e8d449f26d140bfcdd1434e"
+
+# The game rules, with no game types: built once and unit-tested on their own.
+[[crate]]
+id = "core"
+path = "core"
+
+[api]
+path = "api"

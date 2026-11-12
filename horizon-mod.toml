@@ -1,0 +1,8 @@
+id = "resonantia"
+name = "Resonantia"
+version = "0.1.0"
+description = "Hear the eight tones in everything, learn from them and attune to new devices."
+authors = []
+api = "0.2"
+side = "both"
+capabilities = ["registries"]

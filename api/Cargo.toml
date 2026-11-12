@@ -1,0 +1,12 @@
+[package]
+name = "mod-resonantia"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+# The launcher points these at the staged copies: the Horizon source it builds the game
+# from, and this bundle's own `core` crate. Any other dependency must be a crate and
+# version in Horizon's Cargo.lock.
+horizon-client = { git = "https://github.com/horizon-rust/horizon", rev = "1511bd7a23992d219e8d449f26d140bfcdd1434e" }
+resonantia-core = { path = "../core" }
