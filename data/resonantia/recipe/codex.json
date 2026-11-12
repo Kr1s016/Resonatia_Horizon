@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:book",
+    "minecraft:amethyst_shard",
+    "minecraft:glow_ink_sac"
+  ],
+  "result": {
+    "id": "resonantia:codex",
+    "count": 1
+  }
+}

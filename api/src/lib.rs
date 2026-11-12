@@ -7,17 +7,23 @@
 //! - `/resonantia`: your knowledge.
 //! - `/resonantia riddle <name>`: an attunement's riddle and its starting board.
 //! - `/resonantia tune <name> <slot0> … <slot7>`: solve it with tone tokens (`-` for an
-//!   empty slot), spending the tokens' insight. The codex screen will build the same board.
+//!   empty slot), spending the tokens' insight.
+//! - Right-click with the codex: its screen, the same riddles with the mouse (`screen.rs`).
+mod screen;
+
 use horizon_client::mod_api::{
-    AttachmentCodec, AttachmentError, AttachmentType, Compound, Flow, Holder, Hooks, Host,
-    NativeCommand, PerformCommandEvent, RegisterCommandsEvent, Tag, Text, UseItemEvent,
-    UseItemOnEvent,
+    AttachmentCodec, AttachmentError, AttachmentType, ClientTickPreEvent, Compound, Flow, Holder,
+    Hooks, Host, NativeCommand, NetFromClientEvent, NetFromServerEvent, PerformCommandEvent,
+    RegisterCommandsEvent, ScreenMouseButtonPressedPreEvent, ScreenRenderPostEvent, Tag, Text,
+    UseItemEvent, UseItemOnEvent,
 };
+use resonantia_core::codex::{Snapshot, TuneRequest};
 use resonantia_core::{
     AttuneError, Board, Knowledge, Profile, Riddle, RiddleError, ScanResult, TONE_COUNT, Tone,
 };
 
 pub const TUNING_FORK: &str = "resonantia:tuning_fork";
+pub const CODEX: &str = "resonantia:codex";
 
 pub fn hooks() -> Box<dyn Hooks> {
     Box::new(Resonantia)
@@ -348,6 +354,18 @@ fn with_knowledge<R>(
     Ok(out)
 }
 
+/// Sends `uuid` their knowledge for the codex on `channel`.
+fn send_snapshot(host: &mut dyn Host, uuid: u128, channel: &str) {
+    match with_knowledge(host, uuid, |k| Snapshot::of(k)) {
+        Ok(snapshot) => {
+            if let Err(e) = host.net_send_to_player(uuid, channel, &snapshot.to_bytes()) {
+                eprintln!("[resonantia] could not send the codex: {e}");
+            }
+        }
+        Err(e) => eprintln!("[resonantia] could not read knowledge: {e:?}"),
+    }
+}
+
 impl Hooks for Resonantia {
     /// Tuning fork on a block: hear it.
     fn use_item_on(&self, host: &mut dyn Host, event: &mut UseItemOnEvent) -> Flow {
@@ -375,14 +393,19 @@ impl Hooks for Resonantia {
         Flow::Cancel
     }
 
-    /// Tuning fork in the air: show insight on the action bar.
+    /// Tuning fork in the air: insight on the action bar. Codex: open its screen.
     fn use_item(&self, host: &mut dyn Host, event: &mut UseItemEvent) -> Flow {
-        if &*event.stack.item != TUNING_FORK {
+        let item = &*event.stack.item;
+        if item != TUNING_FORK && item != CODEX {
             return Flow::Continue;
         }
         let Some(player) = host.acting_player() else {
             return Flow::Continue;
         };
+        if item == CODEX {
+            send_snapshot(host, player.uuid, screen::OPEN_CHANNEL);
+            return Flow::Cancel;
+        }
         if let Ok(insight) = with_knowledge(host, player.uuid, |k| k.insight) {
             host.action_bar(
                 player.uuid,
@@ -390,6 +413,59 @@ impl Hooks for Resonantia {
             );
         }
         Flow::Cancel
+    }
+
+    /// A codex's tune, on the server: the same check as `/resonantia tune`.
+    fn net_from_client(&self, host: &mut dyn Host, event: &mut NetFromClientEvent) {
+        if event.channel != screen::TUNE_CHANNEL {
+            return;
+        }
+        let uuid = event.player;
+        let Some(request) = TuneRequest::from_bytes(event.data) else {
+            return;
+        };
+        if !resonantia_core::codex::known(&request.attunement) {
+            return;
+        }
+        match with_knowledge(host, uuid, |k| {
+            tune_command(k, &request.attunement, &request.board)
+        }) {
+            Ok(lines) => {
+                for line in lines {
+                    host.tell(uuid, line);
+                }
+            }
+            Err(e) => eprintln!("[resonantia] could not read knowledge: {e:?}"),
+        }
+        send_snapshot(host, uuid, screen::UPDATE_CHANNEL);
+    }
+
+    fn net_from_server(&self, host: &mut dyn Host, event: &mut NetFromServerEvent) {
+        match event.channel {
+            screen::OPEN_CHANNEL => screen::open(host, event.data),
+            screen::UPDATE_CHANNEL => screen::update(event.data),
+            _ => {}
+        }
+    }
+
+    fn screen_render_post(&self, host: &dyn Host, event: &mut ScreenRenderPostEvent) {
+        screen::draw(host, event.batch, event.screen.rect);
+    }
+
+    fn screen_mouse_button_pressed_pre(
+        &self,
+        host: &dyn Host,
+        event: &mut ScreenMouseButtonPressedPreEvent,
+    ) -> Flow {
+        if screen::click(host, event.screen.rect, event.button) {
+            Flow::Cancel
+        } else {
+            Flow::Continue
+        }
+    }
+
+    fn client_tick_pre(&self, host: &mut dyn Host, _event: &mut ClientTickPreEvent) {
+        screen::flush(host);
     }
 
     fn register_commands(&self, _host: &mut dyn Host, event: &mut RegisterCommandsEvent) {

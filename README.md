@@ -17,7 +17,7 @@ data/, assets/       объявления предметов, модели, en_u
 ## Проверка
 
 ```sh
-cd core && cargo test
+cd core && cargo test   # правила, вёрстка и состояние кодекса
 ```
 
 ## Сборка в игру
@@ -27,7 +27,8 @@ horizon-launcher native-build /path/to/resonantia --instance <instance> --trust-
 ```
 
 Мод запинен на коммит Horizon `1511bd7a23992d219e8d449f26d140bfcdd1434e`. В игре:
-ПКМ камертоном по блоку, `/resonantia`, `/resonantia riddle first_chord`,
+Скрафти камертон и кодекс (рецепты в DESIGN.md). ПКМ камертоном по блоку, ПКМ кодексом —
+экран с загадками. Команды: `/resonantia`, `/resonantia riddle first_chord`,
 `/resonantia tune first_chord lux fluxus vigor - - - - -`.
 
 Пока камертон и кодекс используют ванильные модели аметистового осколка и книги:

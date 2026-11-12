@@ -47,5 +47,22 @@
   "resonantia.riddle.missing": "Still silent: %s",
   "resonantia.riddle.too_harmonious": "Too harmonious: dissonance %s",
   "resonantia.riddle.too_dissonant": "Too dissonant: dissonance %s",
-  "resonantia.riddle.slots": "Give eight slots: tone names or - for empty"
+  "resonantia.riddle.slots": "Give eight slots: tone names or - for empty",
+  "resonantia.codex.title": "Resonance Codex",
+  "resonantia.codex.heard": "Heard: %s",
+  "resonantia.codex.pick": "Choose a riddle",
+  "resonantia.codex.chords": "Chords to sound:",
+  "resonantia.codex.dissonance": "Dissonance %s (%s-%s)",
+  "resonantia.codex.clear": "Clear",
+  "resonantia.codex.tune": "Attune",
+  "resonantia.codex.solved": "Attuned!",
+  "resonantia.codex.sent": "Listening...",
+  "resonantia.codex.locked": "Attune what it needs first",
+  "resonantia.codex.already": "Already attuned",
+  "resonantia.codex.unknown": "No such attunement",
+  "resonantia.codex.lacking": "Not enough insight",
+  "resonantia.codex.anchor": "Fixed tokens must stay",
+  "resonantia.codex.missing": "A chord is still silent",
+  "resonantia.codex.too_harmonious": "Needs more dissonance",
+  "resonantia.codex.too_dissonant": "Too much dissonance"
 }

@@ -8,6 +8,8 @@
 
 use std::collections::BTreeSet;
 
+pub mod codex;
+
 /// The eight tones, in wheel order. `Tone::opposite` is four steps away.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tone {

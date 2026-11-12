@@ -47,5 +47,22 @@
   "resonantia.riddle.missing": "Ещё не звучат: %s",
   "resonantia.riddle.too_harmonious": "Слишком гармонично: диссонанс %s",
   "resonantia.riddle.too_dissonant": "Слишком диссонансно: диссонанс %s",
-  "resonantia.riddle.slots": "Укажи восемь гнёзд: названия тонов или - для пустого"
+  "resonantia.riddle.slots": "Укажи восемь гнёзд: названия тонов или - для пустого",
+  "resonantia.codex.title": "Кодекс резонанса",
+  "resonantia.codex.heard": "Услышано: %s",
+  "resonantia.codex.pick": "Выбери загадку",
+  "resonantia.codex.chords": "Нужные аккорды:",
+  "resonantia.codex.dissonance": "Диссонанс %s (%s-%s)",
+  "resonantia.codex.clear": "Сброс",
+  "resonantia.codex.tune": "Настроить",
+  "resonantia.codex.solved": "Настроено!",
+  "resonantia.codex.sent": "Слушаю...",
+  "resonantia.codex.locked": "Сначала нужны другие настройки",
+  "resonantia.codex.already": "Уже настроено",
+  "resonantia.codex.unknown": "Нет такой настройки",
+  "resonantia.codex.lacking": "Не хватает прозрения",
+  "resonantia.codex.anchor": "Якоря нельзя трогать",
+  "resonantia.codex.missing": "Не все аккорды звучат",
+  "resonantia.codex.too_harmonious": "Нужно больше диссонанса",
+  "resonantia.codex.too_dissonant": "Слишком много диссонанса"
 }
